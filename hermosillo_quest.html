@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HERMOSILLO QUEST — Activity Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0a12;
+    --surface:   #13131f;
+    --border:    #2a2a40;
+    --cyan:      #00e5ff;
+    --magenta:   #ff00c8;
+    --yellow:    #ffe600;
+    --green:     #00ff88;
+    --orange:    #ff7700;
+    --white:     #e8e8f0;
+    --muted:     #6a6a8a;
+    --pixel-sz:  3px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── scanlines overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,.18) 2px,
+      rgba(0,0,0,.18) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── pixel border mixin via box-shadow ── */
+  .pixel-box {
+    border: 3px solid;
+    image-rendering: pixelated;
+    position: relative;
+  }
+  .pixel-box::before, .pixel-box::after {
+    content: '';
+    position: absolute;
+    width: 6px; height: 6px;
+    background: var(--bg);
+  }
+  .pixel-box::before { top: -3px; left: -3px; }
+  .pixel-box::after  { bottom: -3px; right: -3px; }
+
+  /* ── layout ── */
+  .screen {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ── header ── */
+  .header {
+    text-align: center;
+    padding: 2.5rem 0 2rem;
+    position: relative;
+  }
+
+  .header-subtitle {
+    font-family: 'VT323', monospace;
+    color: var(--muted);
+    font-size: 22px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    animation: blink 1.6s step-end infinite;
+  }
+
+  .header-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(18px, 4vw, 34px);
+    color: var(--cyan);
+    text-shadow: 4px 4px 0 rgba(0,229,255,.25);
+    line-height: 1.5;
+    letter-spacing: 2px;
+  }
+
+  .header-title span {
+    color: var(--magenta);
+    text-shadow: 4px 4px 0 rgba(255,0,200,.25);
+  }
+
+  .header-divider {
+    margin: 1.5rem auto;
+    height: 3px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--cyan) 0px, var(--cyan) 10px,
+      transparent 10px, transparent 16px,
+      var(--magenta) 16px, var(--magenta) 26px,
+      transparent 26px, transparent 32px
+    );
+    width: 100%;
+  }
+
+  .header-credit {
+    font-size: 16px;
+    color: var(--muted);
+    margin-top: .6rem;
+  }
+  .header-credit a {
+    color: var(--yellow);
+    text-decoration: none;
+  }
+  .header-credit a:hover { color: var(--orange); }
+
+  /* ── section labels ── */
+  .section-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  .section-label::before {
+    content: '► ';
+    color: var(--cyan);
+  }
+
+  /* ── category grid ── */
+  .categories {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 2rem;
+  }
+
+  .cat-btn {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    color: var(--white);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .1s, background .1s, transform .06s;
+    letter-spacing: 1px;
+    position: relative;
+    outline: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cat-btn .cat-icon {
+    font-size: 22px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .cat-btn:hover {
+    border-color: var(--cyan);
+    background: #0d1822;
+    color: var(--cyan);
+  }
+
+  .cat-btn.active {
+    border-color: var(--magenta);
+    background: #1a0820;
+    color: var(--magenta);
+    box-shadow: inset 0 0 0 1px rgba(255,0,200,.3);
+  }
+
+  .cat-btn.active::after {
+    content: ' ◄';
+    color: var(--magenta);
+    font-size: 16px;
+    margin-left: auto;
+  }
+
+  .cat-btn:active { transform: scale(.97); }
+
+  .cat-count {
+    font-size: 14px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .cat-btn.active .cat-count { color: rgba(255,0,200,.6); }
+
+  /* ── generate button ── */
+  .generate-wrap {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-generate {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    background: var(--magenta);
+    color: #000;
+    border: none;
+    padding: 14px 28px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: transform .06s, background .1s;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  }
+
+  .btn-generate:hover { background: #ff33d9; }
+  .btn-generate:active { transform: scale(.96); }
+  .btn-generate:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  .btn-shuffle {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--muted);
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: border-color .1s, color .1s;
+    letter-spacing: 1px;
+  }
+  .btn-shuffle:hover { border-color: var(--yellow); color: var(--yellow); }
+
+  .selected-info {
+    font-size: 18px;
+    color: var(--muted);
+  }
+  .selected-info strong { color: var(--cyan); }
+
+  /* ── result card ── */
+  .result-area {
+    min-height: 240px;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 3px solid var(--cyan);
+    padding: 1.8rem;
+    width: 100%;
+    position: relative;
+    animation: slideIn .18s ease-out;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    top: -3px; left: -3px;
+    width: 10px; height: 10px;
+    background: var(--bg);
+    border-right: 3px solid var(--cyan);
+    border-bottom: 3px solid var(--cyan);
+  }
+  .result-card::after {
+    content: '';
+    position: absolute;
+    bottom: -3px; right: -3px;
+    width: 10px; height: 10px;
+    background: var(--bg);
+    border-left: 3px solid var(--cyan);
+    border-top: 3px solid var(--cyan);
+  }
+
+  .result-empty {
+    background: var(--surface);
+    border: 3px dashed var(--border);
+    padding: 1.8rem;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    color: var(--muted);
+    font-size: 22px;
+    text-align: center;
+    min-height: 180px;
+    animation: none;
+  }
+
+  .result-empty .empty-icon {
+    font-size: 36px;
+    opacity: .5;
+  }
+
+  .result-tag {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: #000;
+    background: var(--cyan);
+    padding: 4px 8px;
+    display: inline-block;
+    margin-bottom: 1rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .result-name {
+    font-family: 'VT323', monospace;
+    font-size: 34px;
+    color: var(--white);
+    line-height: 1.2;
+    margin-bottom: .6rem;
+  }
+
+  .result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 1rem;
+  }
+
+  .result-meta-item {
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .result-meta-item .meta-label {
+    color: var(--muted);
+  }
+
+  .result-meta-item .meta-val {
+    color: var(--yellow);
+  }
+
+  .result-meta-item .meta-val.free {
+    color: var(--green);
+  }
+
+  .result-badge {
+    display: inline-block;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 3px 7px;
+    border: 1px solid;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-left: 8px;
+  }
+  .badge-free { border-color: var(--green); color: var(--green); }
+  .badge-paid { border-color: var(--orange); color: var(--orange); }
+
+  .result-cta {
+    margin-top: 1.4rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--border);
+    font-size: 18px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ── all activities list ── */
+  .all-list {
+    margin-top: 2.5rem;
+  }
+
+  .all-list-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-toggle-list {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--muted);
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: border-color .1s, color .1s;
+    letter-spacing: 1px;
+  }
+  .btn-toggle-list:hover { border-color: var(--green); color: var(--green); }
+
+  .list-container {
+    display: none;
+    margin-top: 1rem;
+  }
+  .list-container.open { display: block; }
+
+  .list-category {
+    margin-bottom: 1.5rem;
+  }
+
+  .list-cat-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--cyan);
+    padding: 6px 10px;
+    border-left: 3px solid var(--cyan);
+    margin-bottom: .6rem;
+    letter-spacing: 1px;
+  }
+
+  .list-item {
+    padding: 6px 10px;
+    border-bottom: 1px dashed var(--border);
+    font-size: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    transition: background .1s;
+  }
+  .list-item:hover { background: var(--surface); }
+
+  .list-item-name { flex: 1; }
+  .list-item-place { color: var(--muted); font-size: 16px; }
+
+  /* ── footer ── */
+  .footer {
+    text-align: center;
+    font-size: 14px;
+    color: var(--muted);
+    padding: 2rem 0 1rem;
+    border-top: 1px dashed var(--border);
+    margin-top: 3rem;
+    letter-spacing: 2px;
+  }
+  .footer a { color: var(--yellow); text-decoration: none; }
+
+  /* ── animations ── */
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+
+  .rolling {
+    animation: pulse .12s step-end 6;
+  }
+
+  /* ── stat bar ── */
+  .stats-row {
+    display: flex;
+    gap: 2px;
+    margin: 1.5rem 0;
+    flex-wrap: wrap;
+  }
+
+  .stat-seg {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    min-width: 12px;
+    transition: background .3s;
+  }
+
+  /* ── mobile ── */
+  @media (max-width: 540px) {
+    .header-title { font-size: 16px; }
+    .categories { grid-template-columns: 1fr 1fr; }
+    .cat-btn { font-size: 17px; padding: 10px 10px; }
+    .result-name { font-size: 26px; }
+    .btn-generate { font-size: 10px; padding: 12px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen">
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <p class="header-subtitle">► INSERT COIN TO START ◄</p>
+    <h1 class="header-title">HERMOSILLO<br><span>QUEST</span></h1>
+    <p style="font-family:'VT323',monospace;font-size:22px;color:var(--muted);margin-top:.8rem;letter-spacing:2px;">
+      ACTIVITY GENERATOR — APRIL 2026
+    </p>
+    <div class="header-divider"></div>
+    <p class="header-credit">
+      Data source: <a href="https://www.reddit.com/user/Yggrmn/" target="_blank">u/Yggrmn</a>
+      via <a href="https://www.reddit.com/r/hermosillo/" target="_blank">r/hermosillo</a>
+    </p>
+  </header>
+
+  <!-- ── CATEGORY SELECT ── -->
+  <section aria-label="Category selection">
+    <p class="section-label">Select category</p>
+    <div class="categories" id="catGrid" role="group" aria-label="Activity categories">
+      <!-- filled by JS -->
+    </div>
+  </section>
+
+  <!-- ── GENERATE ── -->
+  <div class="generate-wrap">
+    <button class="btn-generate" id="btnRoll" onclick="rollActivity()" disabled>
+      ▶ ROLL ACTIVITY
+    </button>
+    <button class="btn-shuffle" onclick="rollAllRandom()" title="Random from all categories">
+      ⚄ RANDOM FROM ALL
+    </button>
+    <span class="selected-info" id="selInfo">
+      Choose a category above
+    </span>
+  </div>
+
+  <!-- ── RESULT ── -->
+  <section aria-label="Activity result" aria-live="polite">
+    <p class="section-label">Activity rolled</p>
+    <div class="result-area" id="resultArea">
+      <div class="result-empty">
+        <span class="empty-icon">🎲</span>
+        <span>No activity rolled yet.<br>Select a category and press ROLL.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS BAR ── -->
+  <div class="stats-row" id="statsBar" aria-hidden="true"></div>
+
+  <!-- ── ALL ACTIVITIES ── -->
+  <section class="all-list" aria-label="Full activity list">
+    <div class="all-list-header">
+      <p class="section-label" style="margin:0;">All activities</p>
+      <button class="btn-toggle-list" onclick="toggleList()" id="btnToggle">
+        [ SHOW LIST ]
+      </button>
+    </div>
+    <div class="list-container" id="listContainer">
+      <!-- filled by JS -->
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p>HERMOSILLO QUEST &nbsp;|&nbsp; DATA: <a href="https://www.reddit.com/user/Yggrmn/" target="_blank">u/Yggrmn</a> &nbsp;|&nbsp; APR 2026</p>
+  </footer>
+
+</div><!-- /screen -->
+
+<script>
+const CATEGORIES = [
+  {
+    id: "expogan",
+    icon: "🐴",
+    label: "Expogan 2026",
+    color: "#ffe600",
+    activities: [
+      { name: "Manifestación de la Expogan", place: "Blvd Rodríguez y Rosales", date: "19 abril", free: true },
+      { name: "Palenque de la Expogan", place: "Expogan", date: "Todo el mes", free: false },
+      { name: "Teatro del Pueblo", place: "Expogan", date: "Todo el mes", free: true, note: "Gratis con boleto de entrada" },
+      { name: "Explanada de las estrellas", place: "Expogan", date: "Todo el mes", free: false },
+      { name: "Tierra Jurásica — Dinosaurios Animatrónicos", place: "Expogan", date: "22 abril", free: true, note: "Incluido con boleto" },
+      { name: "Noche negra con caballos bailadores", place: "Expogan Sonora", date: "24 abril", free: false },
+      { name: "Robocup 2026", place: "Expogan", date: "22 abril", free: false },
+    ]
+  },
+  {
+    id: "shows",
+    icon: "🎭",
+    label: "Shows & Cinema",
+    color: "#ff00c8",
+    activities: [
+      { name: "Cinearte — Sonorenses en el cine", place: "Foro de Bellas Artes (Unison)", date: "Cada martes", free: true },
+      { name: "Cine bajo las estrellas: BTS — El regreso y Comeback", place: "Parque la Ruina", date: "4 abril", free: false },
+      { name: "Cine bajo las estrellas: Hannah Montana 20 Aniversario", place: "Parque la Ruina", date: "5 abril", free: false },
+      { name: "Cine bajo las estrellas: La tumba de las luciérnagas", place: "Parque la Ruina", date: "10 abril", free: false },
+      { name: "Obra: Romeo y Julieta — Amor en tiempos de TikTok", place: "El Mentidero", date: "10, 17, 25 abril", free: false },
+      { name: "Obra Familiar: Protocolo 3312", place: "Andamios Teatro", date: "11–12 abril", free: false },
+      { name: "Obra Infantil: El Show de Lara Campos", place: "CUM", date: "12 abril", free: false },
+      { name: "Cine bajo las estrellas: Mary y la flor de la bruja", place: "Parque la Ruina", date: "17 abril", free: false },
+      { name: "Proyección: Otro modo de ser humano y libre", place: "Galerías Mall", date: "18 abril", free: false, note: "Morritas Films" },
+      { name: "Obra: Dios mío hazme viuda por favor", place: "Auditorio Cívico", date: "25 abril", free: false },
+      { name: "Show Familiar: 100 Años de Cri-Cri", place: "Nuevo Teatro de la Pitic (NTP)", date: "26 abril", free: false, note: "Homenaje Oficial" },
+      { name: "Obra: El amante In...fiel", place: "Auditorio Cívico", date: "28 abril", free: false },
+      { name: "Obra: Sonora las damitas histeria", place: "Emiliana de Zubeldía", date: "30 abril", free: true },
+    ]
+  },
+  {
+    id: "art",
+    icon: "🎨",
+    label: "Art, Books & Dance",
+    color: "#00e5ff",
+    activities: [
+      { name: "Presentación de libro: El norte virgen de mi cuerpo", place: "MUSAS", date: "7 abril", free: false },
+      { name: "Danza: Función compartida de danza contemporánea", place: "Foro82", date: "17 y 19 abril", free: false },
+      { name: "Club de lectura: Lo que no tiene nombre", place: "Librería Gandhi", date: "24 abril", free: false },
+    ]
+  },
+  {
+    id: "workshops",
+    icon: "🛠️",
+    label: "Workshops & Courses",
+    color: "#00ff88",
+    activities: [
+      { name: "Clases de Skate en el bowl", place: "Parque la Ruina", date: "Martes y Jueves", free: true },
+      { name: "Martes de Fotografía", place: "Varía cada sesión (ISC)", date: "Cada martes", free: true },
+      { name: "Clases de adiestramiento canino", place: "Parque la Ruina", date: "Jueves y Sábados", free: true },
+      { name: "Econversando: Riquezas naturales de Sonora", place: "Kiosco Central (Sauceda)", date: "3 abril", free: true },
+      { name: "Pequeños guardabosques: Pintemos animalitos de cartón", place: "Humedal (Sauceda)", date: "4 abril", free: true },
+      { name: "Taller de cumbia Norteña", place: "Academia Corazón Latino", date: "7 abril", free: false },
+      { name: "Taller de pintura y galería de arte", place: "Patio Hermosillo", date: "12 abril", free: true },
+      { name: "Curso de Uñas acrílicas", place: "Karina Amaya Nails", date: "13 abril", free: false },
+      { name: "Taller de cerámica fría — Parte 1", place: "Galerías Mall", date: "17 abril", free: true },
+      { name: "Taller de actuación: Del texto a la acción", place: "Cineteca Sonora", date: "17–18 abril", free: false, note: "Adultos" },
+      { name: "Cortometraje: Aterrizaje Lunar", place: "Cineteca Sonora", date: "18 abril", free: false },
+      { name: "Masterclass de locución con Idzi Dutkiewicz", place: "Multicultural Sonora", date: "19 abril", free: false },
+      { name: "Taller de cerámica fría — Parte 2", place: "Galerías Mall", date: "24 abril", free: true },
+      { name: "Taller: Soldadura con antorcha en sistemas de AC", place: "OASA", date: "24 abril", free: false },
+      { name: "Bootcamp de Presencia Digital para emprendedores", place: "ZUZ Marketing", date: "24 abril", free: false },
+      { name: "Taller: Cómo la crianza influye en nuestra perspectiva de realidad", place: "Sheltr Workspace Valle", date: "25 abril", free: false },
+      { name: "Capacitación de instructores de Zumba con Eliza Stone", place: "NUVU Dance Company", date: "25 abril", free: false },
+      { name: "Taller: Intuición — La Brújula de Autocuidado", place: "Hotel Lucerna", date: "25 abril", free: false },
+      { name: "Pequeños diseñadores: pinta tu lapicera", place: "Galerías Mall", date: "28 abril", free: true },
+      { name: "Mundo Mario: crea tu personaje con foami moldeable", place: "Galerías Mall", date: "29 abril", free: true },
+      { name: "Peque fest: crea tu mini funko", place: "Galerías Mall", date: "30 abril", free: true },
+    ]
+  },
+  {
+    id: "events",
+    icon: "🎪",
+    label: "General Events",
+    color: "#ff7700",
+    activities: [
+      { name: "Open Mic de Standup local", place: "Curalibre, Gloriosa Stage Bar", date: "Cada miércoles", free: false },
+      { name: "BRUJAJA con Liz Cerón", place: "La Gloriosa Stage Bar", date: "3 abril", free: false },
+      { name: "Jornada de Conservación y Limpieza", place: "Bosque Urbano La Sauceda", date: "4 abril", free: true },
+      { name: "Búsqueda de huevos de pascua", place: "Parque Infantil", date: "5 abril", free: false },
+      { name: "Viactiva: Búsqueda de huevos de pascua", place: "Plaza Zaragoza", date: "5 abril", free: false },
+      { name: "Recorrido al cerro de la cementera", place: "Foro La Sauceda (est.)", date: "5 abril", free: true },
+      { name: "Bazar cultural — propuestas artísticas y culturales locales", place: "Foro al aire libre (Sauceda)", date: "5 abril", free: true },
+      { name: "Open de Impro (Improvisación en vivo) — Quimera Impro", place: "La Gloriosa Stage Bar", date: "8 abril", free: false },
+      { name: "6to Festival del Papalote", place: "Cerro Johnson", date: "11 abril", free: false, note: "Premio al más alto y al más original" },
+      { name: "K-Pop Random Dance x Souldance", place: "Galerías Mall", date: "11 abril", free: false },
+      { name: "Domingo Chill — Baile Norteño (Radio Sonora)", place: "La Sauceda", date: "12 abril", free: true },
+      { name: "Viactiva: Juegos de feria, K-Pop y actividades familiares", place: "Plaza Zaragoza", date: "12 abril", free: false },
+      { name: "Carreras de caballos y música en vivo", place: "HDH", date: "12 abril", free: false, note: "Brazza Norteña y Rivales de San Pedro" },
+      { name: "Punto Norte — Congreso de música y producción", place: "Parque la Ruina", date: "13–15 abril", free: false },
+      { name: "Enrique y sus muñecos", place: "London Pub", date: "16 abril", free: false, note: "Presentación única" },
+      { name: "Otro modo de ser humano y libre — charlas y arte femenino", place: "MUSAS", date: "17–19 abril", free: false },
+      { name: "The Capital: Cultura Anime Xperience", place: "Expoforum", date: "18 abril", free: false, note: "Cosplay, K-Pop, Softcombat, Arm Wrestling y más" },
+      { name: "Sufrida — StandUp de Frida Araujo", place: "La Gloriosa Stage Bar", date: "18 abril", free: false },
+      { name: "5to Congreso estatal en emergencias y desastres", place: "Auditorio Ruben Garcilaso (Unison)", date: "18 abril", free: false },
+      { name: "Bazar del sol", place: "Parque la Ruina", date: "18 abril", free: false },
+      { name: "Comedia Cannabica (Standup)", place: "El Pollo Bar", date: "19 abril", free: false },
+      { name: "Rosame las Bolas — StandUp con dinámica de tirarle objetos a los standuperos", place: "La Gloriosa Stage Bar", date: "23 abril", free: false },
+      { name: "Compa Supremo — StandUp de Eder Rivera", place: "La Gloriosa Stage Bar", date: "24 abril", free: false },
+      { name: "Feria de adopción de mascotas", place: "Galerías Mall", date: "25 abril", free: true, note: "Organiza Escuadrón 4 patas" },
+      { name: "Bazar Cafeto — café de cortesía, mascotas bienvenidas", place: "Café 40", date: "25 abril", free: false },
+      { name: "My Little Drag — Show de Drag", place: "La Gloriosa Stage Bar", date: "25 abril", free: false },
+      { name: "Autoshow edición Día del Niño", place: "Patio Hermosillo", date: "26 abril", free: true },
+      { name: "Festejo del Día del Niño", place: "Parque la Ruina", date: "30 abril", free: true },
+    ]
+  },
+  {
+    id: "concerts",
+    icon: "🎸",
+    label: "Concerts & Music",
+    color: "#a855f7",
+    activities: [
+      { name: "ROLA — Música y artistas locales", place: "El Mentidero", date: "Cada jueves", free: false },
+      { name: "Viernes de Jazz por Solaría", place: "La Gloriosa Stage Bar", date: "Cada viernes", free: false },
+      { name: "Jam Sessions — artistas locales improvisando", place: "El Mentidero", date: "Cada sábado", free: false },
+      { name: "Classic Rock Band (Journey, Toto, Beatles, Scorpions…)", place: "London Pub", date: "3 abril", free: false },
+      { name: "Los Capiruchos — Cumbias villeras y sonidero", place: "Gloriosa Stage Bar", date: "3 abril", free: false },
+      { name: "Domingo Chill: Noche de tributos de Rock (Green Day, A7X, Paramore)", place: "Foro al aire libre (Sauceda)", date: "5 abril", free: false },
+      { name: "Sugich en vivo — Mariana Nava y Alex Anguiano", place: "London Pub", date: "9 abril", free: false },
+      { name: "Noche Bohemia y Degustación con Jorge Trewartha", place: "Taller Brujo", date: "10 abril", free: false },
+      { name: "BTS Night 3.0", place: "La Gloriosa Stage Bar", date: "11 abril", free: false, note: "+18 con sorpresas" },
+      { name: "Tributo a Los Bukis y Los Yonics por D'Matisse", place: "London Pub", date: "12 abril", free: false },
+      { name: "Homenaje Big Band Experience (Ray Conniff y Glenn Miller)", place: "Auditorio Cívico", date: "16 abril", free: false },
+      { name: "Ricardo Montaner — El último regreso", place: "CUM", date: "17 abril", free: false },
+      { name: "Vitrales: nostalgia, romance y magia", place: "London Pub", date: "17 abril", free: false, note: "Ramsi, Sampicotres, Mac n Cheese" },
+      { name: "Óscar Calin en Hermosillo", place: "El Mentidero", date: "18 abril", free: false },
+      { name: "Santa Suerte II — Hardcore Fest", place: "London Pub", date: "18 abril", free: false },
+      { name: "Emo Nite — Covers de bandas Emo y Punk 2000s", place: "La Gloriosa Stage Bar", date: "18 abril", free: false },
+      { name: "Tributo a Los Fabulosos Cadillacs — Calaveras y Diablitos", place: "Está Cabral", date: "24 abril", free: false },
+      { name: "La Santa Sabina en Hermosillo", place: "London Pub", date: "25 abril", free: false },
+      { name: "Concierto Candlelight: Tributo a Coldplay (acústico)", place: "Grand Agave", date: "25 abril", free: false },
+      { name: "Concierto Candlelight: Las Cuatro Estaciones de Vivaldi", place: "Grand Agave", date: "25 abril", free: false },
+      { name: "Despertar del Erial — Música original de Héctor Partida", place: "Foro82", date: "26 abril", free: false },
+      { name: "Tributo a BTS y KPOP", place: "Auditorio Cívico", date: "26 abril", free: false },
+      { name: "Chayanne — Bailemos otra vez", place: "Estadio Fernando Valenzuela", date: "30 abril", free: false },
+    ]
+  },
+  {
+    id: "contests",
+    icon: "🏆",
+    label: "Contests & Tournaments",
+    color: "#ffe600",
+    activities: [
+      { name: "Torneo de Roast — Se buscan 16 participantes", place: "Por confirmar", date: "Por confirmar", free: false, note: "Info al DM del post" },
+      { name: "FAOT 2027 — Convocatoria abierta", place: "Por confirmar", date: "Convocatoria abierta", free: true },
+    ]
+  },
+];
+
+let selectedCatId = null;
+let lastRolled = null;
+
+function init() {
+  buildCategoryGrid();
+  buildStatsBar();
+  buildAllList();
+}
+
+function buildCategoryGrid() {
+  const grid = document.getElementById('catGrid');
+  grid.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn';
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', 'false');
+    btn.dataset.id = cat.id;
+    btn.innerHTML = `<span class="cat-icon" aria-hidden="true">${cat.icon}</span>
+      <span>${cat.label}</span>
+      <span class="cat-count">${cat.activities.length}</span>`;
+    btn.onclick = () => selectCategory(cat.id);
+    grid.appendChild(btn);
+  });
+}
+
+function buildStatsBar() {
+  const bar = document.getElementById('statsBar');
+  const total = CATEGORIES.reduce((s, c) => s + c.activities.length, 0);
+  bar.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const pct = Math.round((cat.activities.length / total) * 100);
+    for (let i = 0; i < Math.max(1, Math.round(pct / 2)); i++) {
+      const seg = document.createElement('div');
+      seg.className = 'stat-seg';
+      seg.style.background = cat.id === selectedCatId ? cat.color : 'var(--border)';
+      bar.appendChild(seg);
+    }
+  });
+}
+
+function selectCategory(id) {
+  selectedCatId = id;
+  document.querySelectorAll('.cat-btn').forEach(btn => {
+    const active = btn.dataset.id === id;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+  const cat = CATEGORIES.find(c => c.id === id);
+  document.getElementById('selInfo').innerHTML =
+    `Category: <strong>${cat.icon} ${cat.label}</strong> — ${cat.activities.length} activities`;
+  document.getElementById('btnRoll').disabled = false;
+  buildStatsBar();
+}
+
+function rollActivity() {
+  if (!selectedCatId) return;
+  const cat = CATEGORIES.find(c => c.id === selectedCatId);
+  let pool = cat.activities.filter(a => a !== lastRolled);
+  if (!pool.length) pool = cat.activities;
+  const activity = pool[Math.floor(Math.random() * pool.length)];
+  lastRolled = activity;
+  showResult(activity, cat);
+}
+
+function rollAllRandom() {
+  const all = CATEGORIES.flatMap(c => c.activities.map(a => ({ ...a, _catId: c.id })));
+  const pick = all[Math.floor(Math.random() * all.length)];
+  const cat = CATEGORIES.find(c => c.id === pick._catId);
+  lastRolled = null;
+  showResult(pick, cat);
+  selectCategory(cat.id);
+}
+
+function showResult(activity, cat) {
+  const area = document.getElementById('resultArea');
+  area.innerHTML = '';
+
+  const card = document.createElement('div');
+  card.className = 'result-card rolling';
+  card.style.borderColor = cat.color;
+  card.innerHTML = `
+    <div>
+      <span class="result-tag" style="background:${cat.color}">${cat.icon} ${cat.label}</span>
+    </div>
+    <p class="result-name">${activity.name}</p>
+    <div class="result-meta">
+      <div class="result-meta-item">
+        <span class="meta-label">📍 Location:</span>
+        <span class="meta-val">${activity.place}</span>
+      </div>
+      <div class="result-meta-item">
+        <span class="meta-label">📅 Date:</span>
+        <span class="meta-val">${activity.date}</span>
+      </div>
+      <div class="result-meta-item">
+        <span>
+          <span class="result-badge ${activity.free ? 'badge-free' : 'badge-paid'}">
+            ${activity.free ? '✓ FREE' : '$ PAID'}
+          </span>
+        </span>
+      </div>
+    </div>
+    ${activity.note ? `<p class="result-cta">ℹ️ ${activity.note}</p>` : ''}
+  `;
+
+  area.appendChild(card);
+  setTimeout(() => card.classList.remove('rolling'), 800);
+}
+
+function buildAllList() {
+  const container = document.getElementById('listContainer');
+  container.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const section = document.createElement('div');
+    section.className = 'list-category';
+    const title = document.createElement('p');
+    title.className = 'list-cat-title';
+    title.textContent = `${cat.icon}  ${cat.label}`;
+    section.appendChild(title);
+    cat.activities.forEach(a => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.innerHTML = `
+        <span class="list-item-name">${a.name}
+          ${a.free ? '<span class="result-badge badge-free" style="font-size:7px;padding:2px 5px">FREE</span>' : ''}
+        </span>
+        <span class="list-item-place">${a.place} · ${a.date}</span>`;
+      section.appendChild(item);
+    });
+    container.appendChild(section);
+  });
+}
+
+function toggleList() {
+  const cont = document.getElementById('listContainer');
+  const btn = document.getElementById('btnToggle');
+  const open = cont.classList.toggle('open');
+  btn.textContent = open ? '[ HIDE LIST ]' : '[ SHOW LIST ]';
+}
+
+init();
+</script>
+</body>
+</html>
